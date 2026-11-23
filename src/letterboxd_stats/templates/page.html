@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{title}}</title>
+  <style>
+    /* TODO: design. Use CSS variables and a prefers-color-scheme dark variant. */
+    body { font-family: system-ui, sans-serif; margin: 2rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>{{title}}</h1>
+    <p>{{period_label}}</p>
+  </header>
+  <main>
+    <!-- TODO sections: totals, rating distribution, per-month chart,
+         top directors, top actors, highest/lowest rated, full list -->
+    {{content}}
+  </main>
+  <footer>
+    <!-- TMDB attribution is required when credits come from TMDB -->
+    <p>{{attribution}}</p>
+  </footer>
+</body>
+</html>
