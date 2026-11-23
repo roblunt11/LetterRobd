@@ -2,7 +2,7 @@
 
 Turn your Letterboxd data export into a clean, self-contained stats page: films watched, ratings, and your most-watched directors and actors.
 
-> **Status: early shell.** The project structure, period logic, flag parsing, `.env` loading and the TMDB director and cast lookup are in place. Diary parsing, stats and page rendering are stubs marked `TODO`. See [Roadmap](#roadmap).
+> **Status: early shell.** The project structure, period logic, flag parsing, `.env` loading and the director and cast lookup are in place. Diary parsing, stats and page rendering are stubs marked `TODO`. See [Roadmap](#roadmap).
 
 ## Report periods
 
@@ -51,29 +51,32 @@ source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -e .
 ```
 
-Put the downloaded zip (or the extracted folder) in `data/`.
+Put the downloaded zip (or the extracted folder) in `data/`. That is all the setup there is: no account, no API key.
 
-### Directors and actors (TMDB key)
+### Directors and actors
 
-Letterboxd's export does not include cast or crew. To rank directors and actors, the builder looks each film up on [The Movie Database (TMDB)](https://www.themoviedb.org), which is free for personal, non-commercial use.
+Letterboxd's export does not include cast or crew, so the builder looks each film up in an open database. Choose one with `--source`:
 
-1. Create a TMDB account and open **Settings → API** to request a key.
-2. Copy either credential shown there: the **API Key** (32 hex characters) or the **API Read Access Token** (a long string starting `eyJ`). The builder detects which one you gave it.
-3. Copy `.env.example` to `.env` and paste it in:
+| Source | Sign-up | Notes |
+| --- | --- | --- |
+| `wikidata` (default) | **None** | Free, open data. Only film titles and years are sent. Directors are reliable; cast is patchier (see below). |
+| `tmdb` | Free account and API key | Most complete cast data. Add `TMDB_API_KEY` to `.env`. |
 
-   ```
-   TMDB_API_KEY=your-key-here
-   ```
+Check your chosen source works with one lookup: `lsb --check-source`
 
-4. Check it works: `lsb --check-tmdb`
+**Wikidata, what to expect.**
+- Each film takes about three polite requests, one at a time, as Wikimedia asks, so a diary of a few hundred films takes a few minutes the first time.
+- Wikidata does not guarantee billing order for cast. Where editors recorded an order it is used; otherwise the stored order is, which is often but not always the billing order. Treat actor rankings as approximate. Directors are the strong suit.
+- Coverage varies. Very new or obscure films may have no cast, or no director, listed. TV episodes and many specials are not film items, so they will not match.
+- Wikimedia asks apps to identify themselves. The builder sends its name and your optional `LSB_CONTACT` (an email address or URL, set in `.env`) in the User-Agent. Without it, the project URL is sent. If Wikimedia ever answers 403, setting `LSB_CONTACT` is the fix.
 
-`.env` is git-ignored. Never commit your key or paste it into an issue. A real environment variable named `TMDB_API_KEY` takes priority over the file.
+**Matching.** Films are matched by title and release year. Wikidata matches the English label or alias, trying common spelling variants (curly apostrophes, "and" for "&", hyphen for en dash), and accepts a release year within one year either side, because Letterboxd and Wikidata sometimes disagree. Titles that cannot be matched are kept in your totals but left out of director and actor rankings, and each run lists them. Films that match but have no credits are listed separately.
 
-**How matching works:** each film is searched by title and release year. If nothing is found, the search is repeated without the year and accepts a release year within one year either side (Letterboxd and TMDB sometimes disagree). The title must match after ignoring case, accents and punctuation. Titles TMDB cannot match, such as TV episodes or very new films, are kept in your totals but left out of director and actor rankings, and are listed at the end of each run.
+**Caching.** Results, including misses, are saved per source in `.cache/<source>.json`, so only new films are looked up on later runs, and a fully cached run needs no network. Use `--refresh-cache` after fixing a mismatch or when films gain credits.
 
-**Caching:** results, including misses, are saved to `.cache/tmdb.json`, so only new films are looked up on later runs and a fully cached run needs no key. Use `--refresh-cache` after fixing a mismatch or when new films gain credits.
+**TMDB option.** Create a free account at [themoviedb.org](https://www.themoviedb.org), request a key under **Settings → API**, and copy `.env.example` to `.env` with either the **API Key** or the **API Read Access Token** as `TMDB_API_KEY`. `.env` is git-ignored; never commit your key.
 
-Without a key you can run with `--no-enrich` and still get watch counts and ratings.
+Without any lookup you can run with `--no-enrich` and still get watch counts and ratings.
 
 ## 3. Build
 
@@ -89,10 +92,11 @@ lsb --period all
 | `--period NAME` | `month`, `3months`, `6months`, `year`, `calendar-year` or `all` | `all` |
 | `--calendar-year YYYY` | Year for `calendar-year` | current year |
 | `--as-of YYYY-MM-DD` | Treat this date as "today" for rolling periods | today |
-| `--no-enrich` | Skip the TMDB lookup | off |
+| `--source NAME` | Credits source: `wikidata` or `tmdb` | `wikidata` |
+| `--no-enrich` | Skip the director and cast lookup | off |
 | `--cast-limit N` | Top-billed cast members counted per film | `5` |
-| `--refresh-cache` | Ignore cached TMDB results and look everything up again | off |
-| `--check-tmdb` | Test your TMDB key with one lookup, then exit | off |
+| `--refresh-cache` | Ignore cached results and look everything up again | off |
+| `--check-source` | Test the chosen source with one lookup, then exit | off |
 
 Output is plain HTML in `dist/`, with no external requests, so you can open it from disk or host it on GitHub Pages.
 
@@ -104,15 +108,16 @@ src/letterboxd_stats/
   config.py     flags and .env loading     (done, tested)
   periods.py    the five period windows    (done, tested)
   parse.py      read diary.csv             (stub)
-  enrich.py     TMDB directors and cast    (done, tested)
+  enrich.py     source-agnostic lookup + cache   (done, tested)
+  wikidata.py   Wikidata credits source    (done, tested offline)
+  tmdb.py       TMDB credits source        (done, tested offline)
+  sources.py    choose a source            (done, tested)
+  http.py       shared HTTP transport
   stats.py      build the stats dict       (stub)
   render.py     write HTML pages           (stub)
   templates/
     page.html   page template              (shell)
-tests/
-  test_periods.py
-  test_config.py
-  test_enrich.py
+tests/          unit tests, no network needed
 data/           put your Letterboxd export here (git-ignored)
 ```
 
@@ -122,15 +127,17 @@ Run the tests with `PYTHONPATH=src python -m unittest discover -s tests`.
 
 - [ ] `parse.py`: read the zip or folder, parse `diary.csv`
 - [ ] Filter the diary to each period's date range
-- [x] `enrich.py`: TMDB search, credits, local cache, report unmatched titles
-- [x] Read `TMDB_API_KEY` from `.env`
+- [x] Credits lookup with local cache and reporting of unmatched titles (Wikidata, TMDB)
+- [x] Read settings from `.env`
+- [ ] Try the Wikidata lookup against a real diary and tune the matching
 - [ ] `stats.py`: totals, rating distribution, per-month counts, top directors and actors
 - [ ] `render.py` and `page.html`: design the page, add a period switcher
 - [ ] GitHub Actions workflow to publish to GitHub Pages
+- [ ] Set `PROJECT_URL` in `__init__.py` to the real repository URL
 
 ## Credits and attribution
 
-This product uses the TMDB API but is not endorsed or certified by TMDB. This project is not affiliated with or endorsed by Letterboxd.
+Director and cast data comes from [Wikidata](https://www.wikidata.org) (CC0) or, if you choose it, from TMDB. If you use TMDB: this product uses the TMDB API but is not endorsed or certified by TMDB. This project is not affiliated with or endorsed by Letterboxd or Wikimedia.
 
 ## Licence
 
