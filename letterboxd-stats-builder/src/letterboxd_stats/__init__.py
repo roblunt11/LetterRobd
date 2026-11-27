@@ -3,5 +3,5 @@
 __version__ = "0.1.0"
 
 # Sent to Wikimedia as part of the User-Agent, which their policy requires to include a way to
-# contact the operator. TODO: set this to the real repository URL once it exists.
-PROJECT_URL = "https://github.com/OWNER/letterboxd-stats-builder"
+# contact the operator.
+PROJECT_URL = "https://github.com/roblunt11/LetterRobd"
